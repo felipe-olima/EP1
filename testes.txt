@@ -1,0 +1,14 @@
+p, (p>>q), a ⊢ q
+p>>q, q>>r ⊢ p>>r
+p, ((p&q)>>r) ⊢ r
+p|q, p>>r, (q>>(r|s)) ⊢ r
+p|q, p>>r, q>>r ⊢ r
+~q>>~p ⊢ p>>q
+~p>>~q ⊢ p>>q
+p>>q ⊢ (p>>(q|r))
+p>>q ⊢ (p>>(q&r))
+~(p&q) ⊢ ~p&~q
+~(p|q) ⊢ ~p|~q
+p|q, ~q ⊢ p 
+p>>q, q ⊢ p 
+p>>q, ~q ⊢ ~p
