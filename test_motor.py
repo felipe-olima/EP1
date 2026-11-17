@@ -1,4 +1,4 @@
-"""Testes do motor independentes do parser, usando o oráculo da professora."""
+"""Testes do motor independentes do parser, usando codigo da professora."""
 
 import random
 import unittest
@@ -103,11 +103,9 @@ class TestMotor(unittest.TestCase):
             p, 'direta', False,
         )
         self.assertTrue(resultado.contraexemplo['q'])
-        # O ramo p fecha imediatamente; o ramo q continua até saturar.
         self.assertEqual(resultado.regras[0][0], 'β∨')
         self.assertGreaterEqual(resultado.estatisticas['ramos_fechados'], 1)
 
-        # Aqui a disjunção externa produz uma α diferente em cada alternativa.
         resultado = self.conferir(
             [Or(And(p, q), And(r, s)), Not(p), Not(r)],
             Variable('x'), 'direta', True,
@@ -124,7 +122,6 @@ class TestMotor(unittest.TestCase):
             [Or(Or(p, q), r), Not(p), Not(q), Not(r)],
             s, 'direta', True,
         )
-        # Todas as alternativas, inclusive r após os dois ramos internos, fecham.
         self.assertEqual(resultado.estatisticas['ramos_fechados'], 3)
         disjuncoes = [f for regra, f in resultado.regras if regra == 'β∨']
         self.assertEqual(disjuncoes, ['T (p v q) v r', 'T p v q'])

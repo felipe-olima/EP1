@@ -14,13 +14,13 @@ EscolhaBeta = Callable[[Ramo, list[int]], int]
 
 
 def _validar_formula(formula: Proposition) -> None:
-    """Recusa nós que não pertencem à linguagem de regras do grupo."""
+    """recusa nós que não pertencem à linguagem de regras do grupo"""
     pendentes = [formula]
     while pendentes:
         atual = pendentes.pop()
         if not isinstance(atual, (Variable, Constant, Not, And, Or, Implies)):
             raise ValueError(
-                "Fórmula não suportada pelo motor: " + type(atual).__name__
+                "Fórmula não suportada pelo motor:" + type(atual).__name__
             )
         if isinstance(atual, (And, Or)) and not atual.children:
             raise ValueError("Conjunções e disjunções precisam de operandos.")
@@ -28,7 +28,6 @@ def _validar_formula(formula: Proposition) -> None:
 
 
 def _adicionar(ramo: Ramo, formulas: Iterable[FormulaMarcada]) -> None:
-    """Só uma fórmula recém-adicionada pode fechar um ramo antes aberto."""
     for fm in formulas:
         if ramo.adicionar(fm):
             break
@@ -37,7 +36,6 @@ def _adicionar(ramo: Ramo, formulas: Iterable[FormulaMarcada]) -> None:
 def _alternativas_distintas(
     alternativas: list[list[FormulaMarcada]],
 ) -> list[list[FormulaMarcada]]:
-    # O == do código-base compara equivalência lógica, não identidade sintática.
     vistos = set()
     distintas = []
     for alternativa in alternativas:
@@ -53,12 +51,7 @@ def provar(
     conclusao: Proposition,
     estrategia: str | EscolhaBeta = 'combinada',
 ) -> Resultado:
-    """Decide um sequente por DFS e confere o contraexemplo quando inválido.
-
-    ``estrategia`` é um nome de ESTRATEGIAS ou uma função (ramo, candidatos)
-    que retorna o índice de uma β pendente. Não usa o parser nem tabela-verdade
-    na busca. O histórico inclui expansões de todos os ramos visitados.
-    """
+    
     inicio = perf_counter()
     if isinstance(estrategia, str):
         try:
@@ -115,7 +108,6 @@ def provar(
             _adicionar(ramo, alternativa)
             continue
 
-        # Recalcular as pendências inclui as novas α produzidas nesta etapa.
         while not ramo.fechado():
             alfas = ramo.pendentes_alfa()
             if not alfas:
@@ -145,9 +137,7 @@ def provar(
             raise ValueError("A estratégia deve retornar o índice de uma β pendente.")
         alternativas = aplicar(i)
         if len(alternativas) > 1:
-            # aplicar() já marcou a β. A restauração não deve torná-la pendente.
             estado = ramo.estado()
             for alternativa in reversed(alternativas[1:]):
                 pilha.append((alternativa, estado))
-        # Uma única alternativa (como F ~p) continua sem criar ramificações.
         _adicionar(ramo, alternativas[0])
