@@ -1,4 +1,5 @@
 import argparse
+import re
 
 from parser import parse_sequente, parse_formula
 from motor import provar
@@ -17,15 +18,26 @@ def processar(texto, estrategia): #faz o trabalho de uma linha de sequente
     r = provar(premissas, conclusao, estrategia) 
     print(formatar(premissas, conclusao, r))
 
+def extrair_estrategia(linha):
+    m = re.search(r'--estrategia[\s=]+(\S+)\s*$', linha)
+    if not m:
+        return linha, None
+    nome = m.group(1)
+    return linha[:m.start()].strip(), nome
+
 def rodar_arquivo(caminho,estrategia):
     with open(caminho, encoding='utf-8') as f: 
         for linha in f:
             linha = linha.strip() #tira espaços e quebra de linha das pontas
             if linha == '' or linha.startswith('#'): #pula linhas vazias e comentários
                 continue
+            linha, nova = extrair_estrategia(linha)
             print('-' * 40) #desenha uma linha de 40 traços entre os sequentes
             try: #se uma linha der erro, o script mostra qual foi e continua nas próximas
-                processar(linha, estrategia)
+                if nova == None:
+                    processar(linha, estrategia)
+                else:
+                    processar(linha, nova)
             except Exception as erro:
                 print('ERRO em "' + linha + '": ' + str(erro))
 
@@ -37,7 +49,7 @@ def modo_interativo(estrategia):
 def main():
     ap = argparse.ArgumentParser(description='Provador por tableaux') #cria o leitor de argumentos
     ap.add_argument('sequente', nargs='?') #o argumento é opcional, isto é, se o usuário digitar o sequente, args.sequente guarda o texto. Caso contrário, args.sequente vale None, que vale para os casos em que o usuário entra com um arquivo ou entra no modo interativo 
-    ap.add_argument('--arquivo', help='arquivo com um sequente por linha') 
+    ap.add_argument('--arquivo', help='arquivo com um sequente por linha (aceita linhas "--estrategia nome")') 
     ap.add_argument('--estrategia', default='combinada', choices=ESTRATEGIAS) #a estratégia padrão é a combinada e choices=ESTRATEGIAS recusa qualquer nome fora da lista 
     args = ap.parse_args() #lê o que foi digitado
 
