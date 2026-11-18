@@ -15,14 +15,15 @@ p>>q, q ⊢ p
 p>>q, ~q ⊢ ~p
 
 # fórmulas que não contém |- (não são provadas, saída é como a fórmula é lida)
-p>>q & r
+p>>q&r
 ~q>>p
 
 # fórmulas inválidas ou incompletas (saída é uma mensagem de erro)
 p& |- q
 p>> |- r&
+|- p|~p
 
 # uso do argumento --estrategia nas linhas do arquivo
-p|q, a|b, p>>r, q>>r ⊢ r --estrategia combinada
-p|q, a|b, p>>r, q>>r ⊢ r --estrategia menor
-p|q, a|b, p>>r, q>>r ⊢ r --estrategia inventada
+p|q, a|b, c|d, p>>r, q>>r ⊢ r --estrategia combinada
+p|q, a|b, c|d, p>>r, q>>r ⊢ r --estrategia menor
+p|q, a|b, c|d, p>>r, q>>r ⊢ r --estrategia inventada
