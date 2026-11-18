@@ -1,14 +1,28 @@
-p, (p>>q), a ⊢ q
+# sequentes devidamente formulados, extraídos do livro
+p, p>>q, a ⊢ q
 p>>q, q>>r ⊢ p>>r
-p, ((p&q)>>r) ⊢ r
-p|q, p>>r, (q>>(r|s)) ⊢ r
+p, p&q>>r ⊢ r
+p|q, p>>r, q>>r|s ⊢ r
 p|q, p>>r, q>>r ⊢ r
 ~q>>~p ⊢ p>>q
 ~p>>~q ⊢ p>>q
-p>>q ⊢ (p>>(q|r))
-p>>q ⊢ (p>>(q&r))
+p>>q ⊢ p>>q|r
+p>>q ⊢ p>>q&r
 ~(p&q) ⊢ ~p&~q
 ~(p|q) ⊢ ~p|~q
 p|q, ~q ⊢ p 
 p>>q, q ⊢ p 
 p>>q, ~q ⊢ ~p
+
+# fórmulas que não contém |- (não são provadas, saída é como a fórmula é lida)
+p>>q & r
+~q>>p
+
+# fórmulas inválidas ou incompletas (saída é uma mensagem de erro)
+p& |- q
+p>> |- r&
+
+# uso do argumento --estrategia nas linhas do arquivo
+p|q, a|b, p>>r, q>>r ⊢ r --estrategia combinada
+p|q, a|b, p>>r, q>>r ⊢ r --estrategia menor
+p|q, a|b, p>>r, q>>r ⊢ r --estrategia inventada
