@@ -1,0 +1,626 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+
+\DeclareUnicodeCharacter{03B1}{\ensuremath{\alpha}}
+\DeclareUnicodeCharacter{03B2}{\ensuremath{\beta}}
+\DeclareUnicodeCharacter{2192}{\ensuremath{\rightarrow}}
+\DeclareUnicodeCharacter{2190}{\ensuremath{\leftarrow}}
+\DeclareUnicodeCharacter{2227}{\ensuremath{\wedge}}
+\DeclareUnicodeCharacter{2228}{\ensuremath{\vee}}
+\DeclareUnicodeCharacter{22A2}{\ensuremath{\vdash}}
+\DeclareUnicodeCharacter{223C}{\ensuremath{\sim}}
+
+
+\newcommand{\impl}{\texttt{>{}>}}
+\newcommand{\til}{\texttt{\char`\~}}
+
+\title{EP1 --- Provador de Teoremas por Tableaux Semânticos}
+\author{Preencher ainda!}
+\date{25/11/2026}
+
+\begin{document}
+\maketitle
+
+% =====================================================================
+\section{Visão geral}\label{sec:visao}
+
+O provador de teoremas por tableaux semânticos recebe um sequente, tal como
+$A_1, \dots, A_n \vdash B$, e decide, por meio do algoritmo que será explicado
+na Seção~\ref{sec:busca}, se o sequente é válido ou não. Caso não seja válido, o
+programa mostra um contraexemplo com os valores dos átomos que refutam a
+hipótese de que o sequente era válido, ou seja, há uma configuração de átomos em
+que o sequente é falso.
+
+
+O método utilizado para validar os tableaux semânticos é o da
+refutação~\cite[p.~42]{livro}, em que se falsifica o sequente e, assim, ao
+expandir a primeira regra $\alpha$, temos que as premissas serão T (verdadeiras)
+e a conclusão, F (falsa). Ao aplicarmos as regras $\alpha$ e $\beta$, se todos
+os ramos fecham, ou seja, há uma contradição em que a mesma fórmula tem duas
+valorações diferentes, temos uma contradição. Logo, aquele sequente é válido.
+Caso isso não ocorra, ou seja, o ramo esteja saturado e aberto, então os átomos marcados
+nesse ramo formam um contraexemplo.
+
+
+Arquivos utilizados pelo grupo:
+
+\begin{table}[htbp]
+  \centering
+  \caption{Arquivos utilizados}
+  \label{tab:arquivos}
+  \begin{tabular}{@{}l p{9.5cm}@{}}
+    \toprule
+    Arquivo & Função \\
+    \midrule
+    \texttt{usar\_tableaux.py} & Recebe o texto do usuário e chama outros arquivos \\
+    \texttt{parser.py}         & Transforma o texto em uma árvore de fórmula que será utilizada \\
+    \texttt{motor.py}          & Roda o tableau e devolve o resultado \\
+    \texttt{regras.py}         & Expande cada tipo de fórmula ($\alpha$ e $\beta$) \\
+    \texttt{ramo.py}           & Guarda o ramo atual e detecta quando esse ramo fecha \\
+    \texttt{estrategias.py}    & Decide qual $\beta$ expande primeiro \\
+    \texttt{saida.py}          & Escreve a resposta no terminal \\
+    \texttt{tipos.py}          & Define a fórmula marcada e o resultado da prova\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+O fluxograma de uso é: texto $\rightarrow$ \texttt{parser} $\rightarrow$
+\texttt{motor} (usando regras, ramo e estratégia) $\rightarrow$ \texttt{saida}.
+
+O grupo decidiu não alterar o \texttt{code\_base\_EP1.py} dado pela professora;
+a expansão dos ramos foi feita com BFS (busca em largura), com $\alpha$
+antes de $\beta$.
+
+
+% =====================================================================
+\section{Como usar o script}\label{sec:uso}
+
+\paragraph{Requisitos.} Python 3.10 ou mais recente, sem bibliotecas externas.
+Todos os arquivos \texttt{.py} do programa precisam estar na mesma pasta,
+inclusive o \texttt{code\_base\_EP1.py}. Os comandos abaixo são executados no
+terminal, dentro dessa pasta.
+
+\paragraph{Formas de uso.} O script de utilização é o \texttt{usar\_tableaux.py}.
+Ele pode ser chamado de cinco formas:
+
+\begin{verbatim}
+python3 usar_tableaux.py "p >> q, q >> r |- p >> r"
+python3 usar_tableaux.py --arquivo testes.txt
+python3 usar_tableaux.py "p | q, ~p |- q" --estrategia menor
+python3 usar_tableaux.py
+python3 usar_tableaux.py "p >> q & r"
+\end{verbatim}
+
+\begin{enumerate}
+  \item Prova um sequente digitado entre aspas.
+  \item Prova todos os sequentes de um arquivo, um por linha.
+  \item Escolhe a estratégia de escolha da $\beta$ (Seção~\ref{sec:escolha}):
+        \texttt{direta}, \texttt{reversa}, \texttt{menor}, \texttt{subformula}
+        ou \texttt{combinada}. Sem essa opção, o programa usa a
+        \texttt{combinada}. A opção vale também com \texttt{--arquivo}.
+  \item Sem argumentos, entra no modo interativo: pede as premissas, separadas
+        por vírgula (ou vazio, se não houver), e depois a conclusão.
+  \item Uma fórmula sem \texttt{|-} não é provada; o programa só mostra como
+        ela foi lida, o que ajuda a conferir a precedência dos operadores.
+\end{enumerate}
+
+\paragraph{Sintaxe das fórmulas.} A Tabela~\ref{tab:sintaxe} resume a linguagem
+aceita. Os operadores seguem a precedência \til, \texttt{\&}, \texttt{|},
+\impl, do mais forte para o mais fraco, e \impl{} associa à direita
+(Seção~\ref{sec:leitura}). Espaços são opcionais.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Sintaxe aceita pelo programa}
+  \label{tab:sintaxe}
+  \begin{tabular}{@{}l l@{}}
+    \toprule
+    Elemento & Como escrever \\
+    \midrule
+    Átomo                      & uma letra: \texttt{p}, \texttt{q}, \texttt{A}, \dots \\
+    Negação ($\lnot$)          & \til{} (também aceita ∼ e $\lnot$) \\
+    Conjunção ($\wedge$)       & \texttt{\&} \\
+    Disjunção ($\vee$)         & \texttt{|} \\
+    Implicação ($\rightarrow$) & \impl \\
+    Constantes                 & \texttt{T}, \texttt{True}, \texttt{F}, \texttt{False} \\
+    Separador ($\vdash$)       & \texttt{|-} (também aceita ⊢) \\
+    Premissas                  & separadas por vírgula; sem premissas, comece com \texttt{|-} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Exemplos de saída.} Para um sequente válido:
+
+\begin{verbatim}
+$ python3 usar_tableaux.py "p >> q, q >> r |- p >> r"
+Sequente: p >> q, q >> r |- p >> r
+Resultado: VÁLIDO
+Regras: [('α→', 'F p => r'), ('β→', 'T p => q'), ('β→', 'T q => r')]
+\end{verbatim}
+
+Para um sequente inválido, o programa mostra também o contraexemplo, com V para
+verdadeiro e F para falso:
+
+\begin{verbatim}
+$ python3 usar_tableaux.py "p >> q, q |- p"
+Sequente: p >> q, q |- p
+Resultado: INVÁLIDO
+Contraexemplo: p = F, q = V
+Regras: [('β→', 'T p => q')]
+\end{verbatim}
+
+Na lista de regras, cada par traz o nome da regra e a fórmula marcada sobre a
+qual ela foi aplicada. As fórmulas dessa lista aparecem na notação do
+\texttt{code\_base\_EP1.py}, em que \texttt{\^{}} é a conjunção, \texttt{v} é a
+disjunção, \texttt{=>} é a implicação e $\lnot$ é a negação. Átomos do sequente
+que não aparecem no ramo aberto recebem F no contraexemplo, pois qualquer valor
+serve para eles.
+
+
+\paragraph{Arquivo de sequentes.} O arquivo tem um sequente por linha. Linhas
+vazias e linhas que começam com \texttt{\#} são ignoradas. A saída de cada
+sequente vem separada por uma linha de traços. Se uma linha tiver erro, o
+programa mostra a mensagem e continua nas linhas seguintes:
+
+\begin{verbatim}
+# exemplo de arquivo
+p, p >> q |- q
+
+p >> q, q |- p
+p & |- q
+\end{verbatim}
+
+A última linha do exemplo produz:
+
+\begin{verbatim}
+ERRO em "p & |- q": Esperada uma fórmula: átomo, constante,
+negação ou '(' na posição 5.
+\end{verbatim}
+
+Quando o sequente é digitado direto na linha de comando, um erro de sintaxe
+interrompe o programa com uma mensagem que indica a posição do problema, contada
+a partir de 1.
+
+% =====================================================================
+\section{Estruturas de dados}\label{sec:estruturas}        % item (i)
+
+As estruturas seguem a proposta do livro para um provador com busca em
+profundidade, em que só o ramo atual fica guardado na
+memória~\cite[pp.~58--61]{livro}. A Tabela~\ref{tab:estruturas} relaciona cada
+estrutura do livro com a sua implementação.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Estruturas do livro e sua implementação}
+  \label{tab:estruturas}
+  \begin{tabular}{@{}l l p{7.2cm}@{}}
+    \toprule
+    Livro & Código & Conteúdo \\
+    \midrule
+    Árvore da fórmula & \texttt{Proposition} & Nós \texttt{Variable}, \texttt{Constant},
+      \texttt{Not}, \texttt{And}, \texttt{Or}, \texttt{Implies} do \texttt{code\_base} \\
+    Fórmula marcada & \texttt{FormulaMarcada} & Sinal (T ou F) e fórmula \\
+    Vetor \texttt{ramo} & \texttt{Ramo.formulas} & Lista das fórmulas marcadas do ramo atual \\
+    \texttt{TamAtual} & \texttt{len(Ramo.formulas)} & Tamanho atual do ramo \\
+    Vetor \texttt{betas} & \texttt{Ramo.expandida} & Marca quais fórmulas já foram expandidas \\
+    \texttt{PilhaDeRamos} & \texttt{pilha} (em \texttt{motor.py}) & Pares (alternativa $\beta_2$, \texttt{Estado}) \\
+    --- & \texttt{Ramo.vistos} & Dicionário usado para detectar o fechamento \\
+    --- & \texttt{Resultado} & Resposta da prova \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Fórmulas.} Cada fórmula é a árvore \texttt{Proposition} do
+\texttt{code\_base\_EP1.py}: o conectivo principal fica na raiz e as subfórmulas
+são os filhos, como sugere o livro~\cite[p.~61]{livro}. O grupo usa essa árvore
+sem alterá-la.
+
+\paragraph{Fórmula marcada.} A classe \texttt{FormulaMarcada}, em
+\texttt{tipos.py}, guarda um sinal (\texttt{True} para T, \texttt{False} para F)
+e a fórmula. O método \texttt{chave()} devolve a fórmula escrita como texto
+(\texttt{str}), e é essa chave que o programa usa para comparar fórmulas. Não se
+usa o \texttt{==} do \texttt{code\_base}, que compara por equivalência lógica
+(Seção~\ref{sec:dificuldades}).
+
+\paragraph{Ramo.} A classe \texttt{Ramo}, em \texttt{ramo.py}, tem quatro
+campos:
+\begin{itemize}
+  \item \texttt{formulas}: a lista das fórmulas marcadas, na ordem em que
+        entraram no ramo; o tamanho dela faz o papel de \texttt{TamAtual};
+  \item \texttt{expandida}: uma lista de booleanos do mesmo tamanho, que marca
+        as fórmulas já expandidas; cumpre o papel do vetor \texttt{betas} do
+        livro, mas marca também as $\alpha$;
+  \item \texttt{vistos}: um dicionário que leva a chave de cada fórmula ao
+        conjunto de sinais com que ela já apareceu no ramo;
+  \item \texttt{\_fechado}: indica se o ramo já fechou.
+\end{itemize}
+
+Ao adicionar uma fórmula, o ramo só precisa conferir essa fórmula nova: se a
+mesma chave já apareceu com o sinal oposto, o ramo fecha. Isso segue a
+observação do livro de que só as fórmulas recém-inseridas podem fechar o
+ramo~\cite[p.~60]{livro}, e a consulta ao dicionário leva tempo constante. O ramo
+também fecha quando recebe uma constante com o sinal contrário ao seu valor
+(\texttt{T False} ou \texttt{F True}).
+
+\paragraph{Pilha de ramos.} Antes de bifurcar, o motor guarda o ponto para onde
+deve voltar. A classe \texttt{Estado} registra o tamanho do ramo e uma cópia de
+\texttt{expandida}. Cada entrada da \texttt{pilha} é o par (alternativa
+$\beta_2$, \texttt{Estado}), equivalente à tripla
+$\langle\beta_2, \texttt{TamAtual}, \texttt{betas}\rangle$ do
+livro~\cite[p.~59]{livro}. Para restaurar o ramo, o método
+\texttt{restaurar} corta a lista no tamanho guardado, recupera as marcas de
+expansão e reconstrói o dicionário \texttt{vistos} a partir das fórmulas que
+sobraram.
+
+\paragraph{Resultado.} A classe \texttt{Resultado}, em \texttt{tipos.py}, guarda
+a resposta (válido ou não), o contraexemplo, a lista de regras aplicadas e
+estatísticas da prova: número de expansões, ramos fechados, tempo e átomos
+livres.
+
+% =====================================================================
+\section{Leitura das fórmulas}\label{sec:leitura}          % item (ii)
+
+A leitura é feita pelo \texttt{parser.py}, sem usar o \texttt{eval} do Python.
+O \texttt{eval} até reconheceria os operadores \til, \texttt{\&}, \texttt{|} e
+\impl, que o \texttt{code\_base} redefine, mas com a precedência do Python, que
+é diferente da lógica: \texttt{p >{}> q \& r} seria lido como
+$(p \rightarrow q) \wedge r$, e não como $p \rightarrow (q \wedge r)$.
+
+\paragraph{Tokenização.} O texto é dividido em símbolos (\emph{tokens}) por uma
+expressão regular que reconhece \impl, \texttt{True}, \texttt{False}, letras,
+os três símbolos de negação, \texttt{\&}, \texttt{|} e parênteses. Espaços são
+ignorados. Qualquer outro caractere gera um erro com a sua posição.
+
+\paragraph{Análise.} O parser é descendente recursivo, com um método para cada
+nível de precedência. A gramática, do operador mais fraco para o mais forte, é:
+
+\begin{verbatim}
+implicacao := disjuncao ( '>>' implicacao )?
+disjuncao  := conjuncao ( '|' conjuncao )*
+conjuncao  := unario ( '&' unario )*
+unario     := ('~' | '∼' | '¬') unario | '(' implicacao ')'
+            | 'T' | 'True' | 'F' | 'False' | letra
+\end{verbatim}
+
+A implicação chama a si mesma do lado direito, o que faz \impl{} associar à
+direita: \texttt{p >{}> q >{}> r} é lido como $p \rightarrow (q \rightarrow r)$.
+Conjunções e disjunções associam à esquerda. O parser cria os nós com os
+construtores \texttt{And(a, b)} e \texttt{Or(a, b)}, e não com os operadores
+\texttt{\&} e \texttt{|} do \texttt{code\_base}, que juntariam
+\texttt{(p \& q) \& r} em um único nó com três filhos. Assim, toda conjunção e
+disjunção lida tem exatamente dois filhos. As letras \texttt{T} e \texttt{F}
+são constantes, não átomos.
+
+\paragraph{Sequentes.} A função \texttt{parse\_sequente} procura o separador
+\texttt{|-} (ou ⊢) antes de dividir o texto em símbolos, porque o \texttt{|}
+sozinho é a disjunção. Deve haver exatamente um separador. O lado esquerdo é
+dividido nas vírgulas, e cada parte é lida como uma premissa; se ele estiver
+vazio, o sequente não tem premissas. O lado direito é a conclusão. As posições
+dos erros são contadas em relação à linha inteira, a partir de 1.
+
+\paragraph{Arquivos.} A função \texttt{ler\_arquivo} lê um sequente por linha,
+ignora linhas vazias e comentários com \texttt{\#}, e informa o número da linha
+quando há erro.
+
+O resultado da leitura é a lista de premissas e a conclusão, como árvores
+\texttt{Proposition}. A partir delas, o motor monta o ramo inicial
+$\mathrm{T}A_1, \dots, \mathrm{T}A_n, \mathrm{F}B$.
+
+% =====================================================================
+\section{Regras de expansão}\label{sec:regras}             % item (iii)
+
+As regras são as do enunciado, que coincidem com as do livro~\cite[p.~43]{livro}.
+Uma regra $\alpha$ acrescenta $\alpha_1$ e $\alpha_2$ ao fim do ramo; uma regra
+$\beta$ divide o ramo em dois, um com $\beta_1$ e outro com
+$\beta_2$~\cite[p.~44]{livro}. A Tabela~\ref{tab:regras} mostra as oito regras,
+com os nomes que aparecem na saída do programa.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Regras de expansão}
+  \label{tab:regras}
+  \begin{tabular}{@{}l l l l@{\hspace{1.5cm}}l l l l@{}}
+    \toprule
+    Nome & $\alpha$ & $\alpha_1$ & $\alpha_2$ & Nome & $\beta$ & $\beta_1$ & $\beta_2$ \\
+    \midrule
+    \texttt{α∧} & $\mathrm{T}\,C \wedge B$ & $\mathrm{T}\,C$ & $\mathrm{T}\,B$ &
+    \texttt{β∧} & $\mathrm{F}\,C \wedge B$ & $\mathrm{F}\,C$ & $\mathrm{F}\,B$ \\
+    \texttt{α∨} & $\mathrm{F}\,C \vee B$ & $\mathrm{F}\,C$ & $\mathrm{F}\,B$ &
+    \texttt{β∨} & $\mathrm{T}\,C \vee B$ & $\mathrm{T}\,C$ & $\mathrm{T}\,B$ \\
+    \texttt{α→} & $\mathrm{F}\,C \rightarrow B$ & $\mathrm{T}\,C$ & $\mathrm{F}\,B$ &
+    \texttt{β→} & $\mathrm{T}\,C \rightarrow B$ & $\mathrm{F}\,C$ & $\mathrm{T}\,B$ \\
+    \texttt{α¬} & $\mathrm{T}\,\lnot C$ & $\mathrm{F}\,C$ & $\mathrm{F}\,C$ &
+    \texttt{β¬} & $\mathrm{F}\,\lnot C$ & $\mathrm{T}\,C$ & $\mathrm{T}\,C$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Implementação.} O arquivo \texttt{regras.py} tem duas funções. A
+função \texttt{tipo} classifica uma fórmula marcada como \texttt{alfa},
+\texttt{beta}, \texttt{literal} (átomo) ou \texttt{constante}. A função
+\texttt{expandir} devolve o nome da regra e a lista de alternativas: uma única
+alternativa com as fórmulas a acrescentar, no caso $\alpha$, ou uma alternativa
+por ramo, no caso $\beta$.
+
+\paragraph{Casos especiais.}
+\begin{itemize}
+  \item \textbf{$\mathrm{F}\,\lnot C$:} é classificada como $\beta$, mas
+        $\beta_1 = \beta_2$. O motor remove alternativas repetidas antes de
+        bifurcar (função \texttt{\_alternativas\_distintas}), então essa regra
+        só acrescenta $\mathrm{T}\,C$ ao ramo, sem criar um ramo novo, como
+        observa o livro~\cite[pp.~44--45]{livro}.
+  \item \textbf{Constantes:} não são expandidas. $\mathrm{T}\,\texttt{True}$ e
+        $\mathrm{F}\,\texttt{False}$ não fazem nada;
+        $\mathrm{T}\,\texttt{False}$ e $\mathrm{F}\,\texttt{True}$ fecham o
+        ramo na hora (Seção~\ref{sec:estruturas}).
+  \item \textbf{Átomos:} também não são expandidos~\cite[p.~44]{livro}; são
+        eles que formam o contraexemplo.
+  \item \textbf{Mais de dois operandos:} se uma conjunção ou disjunção tiver
+        mais de dois filhos, o que acontece quando ela é montada com os
+        operadores do \texttt{code\_base}, a regra $\alpha$ acrescenta todos os
+        filhos e a regra $\beta$ cria um ramo para cada filho.
+\end{itemize}
+
+Cada fórmula é expandida no máximo uma vez em cada ramo: depois de usada, ela
+fica marcada em \texttt{Ramo.expandida}.
+
+% =====================================================================
+\section{Busca de ramos}\label{sec:busca}                  % item (iv)
+
+O Algoritmo 4.1 do livro~\cite[p.~56]{livro} deixa duas escolhas em aberto: qual
+ramo expandir (linha 3) e qual regra aplicar nesse ramo (linha 8). Esta seção
+trata da primeira; a Seção~\ref{sec:escolha}, da segunda.
+
+\paragraph{Estratégia escolhida.} O programa usa busca em profundidade: expande
+um ramo até ele fechar ou ficar saturado. Ao aplicar uma $\beta$, segue pela
+primeira alternativa ($\beta_1$) e guarda as outras na pilha. Quando o ramo
+fecha, retoma a alternativa da bifurcação mais recente. O livro recomenda essa
+busca em vez da busca em largura por dois motivos: ela chega antes a um ramo
+saturado, quando existe, e só precisa guardar o ramo atual na
+memória~\cite[pp.~56--57]{livro}.
+
+\paragraph{O laço principal.} A função \texttt{provar}, em \texttt{motor.py},
+executa os seguintes passos:
+
+\begin{verbatim}
+ramo ← T A1, ..., T An, F B;   pilha ← vazia
+repita:
+  se o ramo está fechado:
+      se a pilha está vazia: devolve VÁLIDO
+      desempilha (alternativa, estado); restaura o ramo; adiciona a alternativa
+      volta ao início
+  enquanto o ramo está aberto e há α pendente: aplica a primeira α
+  se o ramo fechou: volta ao início
+  se não há β pendente: monta o contraexemplo, confere e devolve INVÁLIDO
+  escolhe uma β pela estratégia e a marca como expandida
+  empilha as alternativas β2, ..., βn com o estado atual do ramo
+  adiciona β1 ao ramo
+\end{verbatim}
+
+O estado empilhado já tem a $\beta$ marcada como expandida, então ela não é
+expandida de novo quando o ramo é restaurado. Ao adicionar várias fórmulas, o
+motor para assim que o ramo fecha, porque o restante seria inútil.
+
+\paragraph{Exemplo.} Para $p \rightarrow q, q \rightarrow r \vdash p \rightarrow r$,
+o mesmo exemplo usado pelo livro nas pp.~58--61, o programa faz:
+\begin{enumerate}
+  \item Ramo inicial: $\mathrm{T}\,p \rightarrow q$,
+        $\mathrm{T}\,q \rightarrow r$, $\mathrm{F}\,p \rightarrow r$
+        (tamanho 3).
+  \item Regra \texttt{α→} em $\mathrm{F}\,p \rightarrow r$: entram
+        $\mathrm{T}\,p$ e $\mathrm{F}\,r$ (tamanho 5).
+  \item Regra \texttt{β→} em $\mathrm{T}\,p \rightarrow q$: empilha
+        $\mathrm{T}\,q$ com tamanho 5 e adiciona $\mathrm{F}\,p$, que fecha o
+        ramo com $\mathrm{T}\,p$.
+  \item Desempilha: volta ao tamanho 5 e adiciona $\mathrm{T}\,q$.
+  \item Regra \texttt{β→} em $\mathrm{T}\,q \rightarrow r$: empilha
+        $\mathrm{T}\,r$ com tamanho 6 e adiciona $\mathrm{F}\,q$, que fecha o
+        ramo com $\mathrm{T}\,q$.
+  \item Desempilha: volta ao tamanho 6 e adiciona $\mathrm{T}\,r$, que fecha o
+        ramo com $\mathrm{F}\,r$.
+  \item A pilha está vazia e o último ramo fechou: o sequente é válido, com 3
+        expansões e 3 ramos fechados.
+\end{enumerate}
+
+\paragraph{Contraexemplo.} Quando sobra um ramo aberto sem $\alpha$ nem $\beta$
+pendentes, ele está saturado. O contraexemplo dá a cada átomo o valor do sinal
+com que ele aparece no ramo: V para T e F para F. Átomos do sequente que não
+aparecem no ramo recebem F, porque qualquer valor serve para eles. Antes de
+responder, o motor confere com o método \texttt{evaluate} do \texttt{code\_base}
+que essa valoração torna todas as premissas verdadeiras e a conclusão falsa. O
+Lema de Hintikka garante que isso sempre acontece~\cite[p.~51]{livro}; se
+falhasse, o programa acusaria um erro interno.
+
+\paragraph{Término e registro.} O processo sempre termina, porque cada fórmula é
+expandida no máximo uma vez por ramo e cada expansão gera fórmulas
+menores~\cite[p.~52]{livro}. Cada regra aplicada é registrada na lista
+\texttt{regras}, como o par (nome da regra, fórmula marcada), na ordem em que foi
+aplicada, incluindo as aplicadas em ramos que depois fecharam.
+
+% =====================================================================
+\section{Escolha de regra}\label{sec:escolha}              % item (v)
+
+\paragraph{$\alpha$ primeiro.} Em cada passo, o motor aplica todas as $\alpha$
+pendentes antes de qualquer $\beta$. Uma $\alpha$ não cria ramos e pode fechar o
+ramo antes de qualquer bifurcação; por isso, essa estratégia é a mais usada~\cite[p.~57]{livro}. A ordem entre as $\alpha$ não muda o resultado, e o motor
+as aplica na ordem em que aparecem no ramo. Depois de expandida, a fórmula fica
+marcada e não é usada de novo, o que equivale a descartá-la, como sugere o livro.
+
+\paragraph{Escolha da $\beta$.} Quando não há mais $\alpha$, é preciso escolher
+uma das $\beta$ pendentes, e essa escolha pode mudar muito o tamanho do tableau:
+no exemplo do livro, o mesmo sequente gera cinco ramos numa ordem e quatro na
+outra~\cite[pp.~46--47]{livro}. O arquivo \texttt{estrategias.py} implementa as
+cinco estratégias do livro~\cite[p.~58]{livro}. Todas recebem o ramo e a lista
+de $\beta$ pendentes e devolvem a posição da escolhida.
+
+\begin{itemize}
+  \item \textbf{\texttt{direta}:} a primeira $\beta$ do ramo.
+  \item \textbf{\texttt{reversa}:} a última $\beta$ do ramo.
+  \item \textbf{\texttt{menor}:} a $\beta$ com menos nós na árvore da fórmula,
+        pois uma fórmula menor tende a fechar o ramo mais rápido.
+  \item \textbf{\texttt{subformula}:} a $\beta$ com mais pontos na função
+        \texttt{pontos\_subformula}, que dá um ponto para cada alternativa
+        cuja fórmula já está no ramo com o sinal oposto. Essa alternativa fecha
+        o ramo assim que é adicionada. É a versão refinada do livro, que leva em
+        conta a polaridade.
+  \item \textbf{\texttt{combinada}} (padrão): a de mais pontos; em caso de
+        empate, a menor; persistindo o empate, a primeira do ramo.
+\end{itemize}
+
+A estratégia padrão é a \texttt{combinada}, porque prefere uma $\beta$ que fecha
+um dos ramos na hora e, assim, evita bifurcações inúteis. A estratégia pode ser
+trocada na linha de comando (Seção~\ref{sec:uso}).
+
+\paragraph{Comparação.} Para medir o efeito da escolha, usamos sequentes com $k$
+disjunções que não ajudam na prova, seguidas de $P$ e $P \rightarrow Q$:
+\[
+  a \vee b,\; c \vee d,\; \dots,\; P,\; P \rightarrow Q \vdash Q .
+\]
+A Tabela~\ref{tab:estrategias} mostra o número de expansões de cada estratégia.
+Em todos os casos, o número de ramos fechados foi uma unidade maior que o de
+expansões.
+
+% Para refazer os números: provar(premissas, conclusao, estrategia).estatisticas
+\begin{table}[htbp]
+  \centering
+  \caption{Número de expansões por estratégia}
+  \label{tab:estrategias}
+  \begin{tabular}{@{}r r r r r r@{}}
+    \toprule
+    $k$ & \texttt{direta} & \texttt{reversa} & \texttt{menor} & \texttt{subformula} & \texttt{combinada} \\
+    \midrule
+    2 &   7 & 1 &   7 & 1 & 1 \\
+    4 &  31 & 1 &  31 & 1 & 1 \\
+    6 & 127 & 1 & 127 & 1 & 1 \\
+    8 & 511 & 1 & 511 & 1 & 1 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+As estratégias \texttt{direta} e \texttt{menor} expandem as disjunções inúteis
+primeiro e fazem $2^{k+1} - 1$ expansões. A \texttt{menor} empata porque todas as
+$\beta$ têm o mesmo tamanho, e então segue a ordem do ramo. A
+\texttt{subformula} e a \texttt{combinada} escolhem $P \rightarrow Q$ de
+imediato, porque a alternativa $\mathrm{F}\,P$ fecha com $\mathrm{T}\,P$, e
+terminam com uma expansão. A \texttt{reversa} também faz uma só expansão, mas por
+acaso: $P \rightarrow Q$ é a última premissa. Com $P$ e $P \rightarrow Q$ no
+início, os papéis se invertem: a \texttt{reversa} passa a fazer $2^{k+1} - 1$
+expansões, enquanto a \texttt{direta} e a \texttt{menor} fazem uma. Já a
+\texttt{subformula} e a \texttt{combinada} fazem uma só expansão nas duas ordens.
+
+% =====================================================================
+\section{Sequentes de teste}\label{sec:testes}
+
+\paragraph{Sequentes fixos.} A Tabela~\ref{tab:sequentes} mostra os sequentes
+usados, que podem ser encontrados no arquivo \texttt{testes.txt}, com o resultado do programa. Em todos, o resultado coincidiu com o da
+tabela-verdade.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Sequentes de teste e resultados}
+  \label{tab:sequentes}
+  \small
+  \begin{tabular}{@{}l l l@{}}
+    \toprule
+    Sequente & Resultado \\
+    \midrule
+    \multicolumn{2}{@{}l}{\textit{Sequentes extra\'idos do livro}} \\
+    \addlinespace[2pt]
+    $p,\ p \to q,\ a \vdash q$ & v\'alido \\
+    $p \to q,\ q \to r \vdash p \to r$ & v\'alido \\
+    $p,\ p \land q \to r \vdash r$ & inv\'alido: $p=\V,\ q=\F,\ r=\F$ \\
+    $p \lor q,\ p \to r,\ q \to r \lor s \vdash r$ & inv\'alido: $p=\F,\ q=\V,\ r=\F,\ s=\V$ \\
+    $p \lor q,\ p \to r,\ q \to r \vdash r$ & v\'alido \\
+    $\lnot q \to \lnot p \vdash p \to q$ & v\'alido \\
+    $\lnot p \to \lnot q \vdash p \to q$ & inv\'alido: $p=\V,\ q=\F$ \\
+    $p \to q \vdash p \to q \lor r$ & v\'alido \\
+    $p \to q \vdash p \to q \land r$ & inv\'alido: $p=\V,\ q=\V,\ r=\F$ \\
+    $\lnot(p \land q) \vdash \lnot p \land \lnot q$ & inv\'alido: $p=\V,\ q=\F$ \\
+    $\lnot(p \lor q) \vdash \lnot p \lor \lnot q$ & v\'alido \\
+    $p \lor q,\ \lnot q \vdash p$ & v\'alido \\
+    $p \to q,\ q \vdash p$ & inv\'alido: $p=\F,\ q=\V$ \\
+    $p \to q,\ \lnot q \vdash \lnot p$ & v\'alido \\
+    \midrule
+    \multicolumn{2}{@{}l}{\textit{F\'ormulas sem $\vdash$ (sa\'ida \'e a leitura da f\'ormula)}} \\
+    \addlinespace[2pt]
+    $p \to q \land r$ & lida como $p \to (q \land r)$ \\
+    $\lnot q \to p$ & lida como $(\lnot q) \to p$ \\
+    \midrule
+    \multicolumn{2}{@{}l}{\textit{F\'ormulas inv\'alidas ou incompletas}} \\
+    \addlinespace[2pt]
+    $p\ \land\ \vdash q$ & mensagem de erro \\
+    $p \to\ \vdash r \land$ & mensagem de erro \\
+    $\vdash p \lor \lnot p$ & mensagem de erro \\
+    \midrule
+    \multicolumn{2}{@{}l}{\textit{Uso do argumento} \texttt{-{}-estrategia}} \\
+    \addlinespace[2pt]
+    $p \lor q,\ a \lor b,\ c \lor d,\ p \to r,\ q \to r \vdash r$ \texttt{-{}-estrategia combinada} & v\'alido \\
+    $p \lor q,\ a \lor b,\ c \lor d,\ p \to r,\ q \to r \vdash r$ \texttt{-{}-estrategia menor} & v\'alido \\
+    $p \lor q,\ a \lor b,\ c \lor d,\ p \to r,\ q \to r \vdash r$ \texttt{-{}-estrategia inventada} & mensagem de erro \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Testes automáticos.} Os testes automatizados rodam com
+\texttt{python3 -m unittest}, na mesma pasta. Além disso, o comando \texttt{python3 -m unittest -v} permite visualizar os testes realizados, os quais foram todos bem sucedidos.
+
+% =====================================================================
+\section{Dificuldades encontradas}\label{sec:dificuldades}
+
+A maior parte das dificuldades veio de comportamentos do
+\texttt{code\_base\_EP1.py} que atrapalham a implementação de um tableau. Como o
+grupo decidiu não alterar esse arquivo, cada problema foi contornado no código
+do grupo.
+
+\begin{itemize}
+  \item \textbf{Igualdade por equivalência lógica.} O \texttt{==} entre fórmulas
+        do \texttt{code\_base} monta a tabela-verdade das duas e compara os
+        resultados. Assim, \texttt{(P | \char`\~P) == (Q | \char`\~Q)} é
+        verdadeiro, e \texttt{P in [P | P]} também. Além de lento, isso faria o
+        programa tratar fórmulas diferentes como iguais. Solução: comparar
+        fórmulas pelo texto, com \texttt{str(f)}.
+  \item \textbf{Fórmulas sem \emph{hash}.} As fórmulas não podem ser guardadas em
+        \texttt{set} nem usadas como chave de dicionário. Solução: usar o texto
+        da fórmula como chave, no método \texttt{chave()} de
+        \texttt{FormulaMarcada}.
+  \item \textbf{Achatamento de \texttt{\&} e \texttt{|}.} Os operadores do
+        \texttt{code\_base} transformam \texttt{(P \& Q) \& R} em um único nó
+        com três filhos, enquanto as regras do enunciado são binárias. Solução:
+        o parser usa os construtores \texttt{And(a, b)} e \texttt{Or(a, b)}, e
+        as regras aceitam mais de dois filhos por segurança.
+  \item \textbf{Precedência do Python.} Ler as fórmulas com \texttt{eval} daria
+        a precedência do Python, em que \texttt{P >{}> Q \& R} vira
+        $(P \rightarrow Q) \wedge R$. Solução: um parser próprio
+        (Seção~\ref{sec:leitura}).
+  \item \textbf{Classe \texttt{Tree}.} No \texttt{code\_base}, o método
+        \texttt{to\_tree} não liga os nós aos pais, e o método \texttt{height}
+        entra em laço infinito quando o nó tem pai. Solução: o ramo foi
+        implementado como lista, sem usar essa classe.
+  \item \textbf{Erro no demo.} O arquivo de demonstração classifica
+        $P \rightarrow Q, Q \rightarrow R \vdash R$ como válido, mas ele é
+        inválido (Seção~\ref{sec:testes}).
+  \item \textbf{Símbolos parecidos.} O símbolo de negação do enunciado em PDF
+        (∼) não é o til do teclado (\til). O parser aceita os dois, além de
+        $\lnot$.
+\end{itemize}
+
+
+% =====================================================================
+\begin{thebibliography}{9}
+
+\bibitem{livro} F.~S.~C. da Silva, M.~Finger e A.~C.~V. de Melo.
+  \emph{Lógica para Computação}. Thomson, 2006.
+\bibitem{codebase} A.~Kay. \emph{dcaa}. Disponível em
+  \url{https://bitbucket.org/Andrew-Kay/dcaa/src/master}. Código adaptado
+  no arquivo \texttt{code\_base\_EP1.py}.
+\end{thebibliography}
+
+\end{document}
